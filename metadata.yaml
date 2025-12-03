@@ -78,3 +78,6 @@ assumes:
       - all-of:
           - juju >= 3.4.3
           - juju < 4
+      - all-of:
+          - juju >= 4.0.0
+          - juju < 5    

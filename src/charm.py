@@ -222,6 +222,11 @@ class MySQLOperatorCharm(MySQLCharmBase, TypedCharmBase[CharmConfig]):
         """Handle the install event."""
         self.unit.status = MaintenanceStatus("Installing MySQL")
 
+        try:
+            self.unit.set_ports(3306, 33060, 33061, 33062)
+        except Exception:
+            logger.exception("failed to set unit ports 3306, 33060, 33061, 33062")
+
         if not is_volume_mounted():
             # persistent data directory not mounted, reboot unit
             logger.warning("Data directory not attached. Will reboot unit.")
@@ -326,6 +331,11 @@ class MySQLOperatorCharm(MySQLCharmBase, TypedCharmBase[CharmConfig]):
         self.unit.status = MaintenanceStatus("Setting up cluster node")
 
         try:
+            self.unit.set_ports(3306, 33060, 33061, 33062)
+        except Exception:
+            logger.exception("failed to set unit ports 3306, 33060, 33061, 33062")
+
+        try:
             self.workload_initialise()
         except MySQLConfigureMySQLRolesError:
             self.unit.status = BlockedStatus("Failed to initialize MySQL roles")
@@ -368,12 +378,6 @@ class MySQLOperatorCharm(MySQLCharmBase, TypedCharmBase[CharmConfig]):
 
         if self._is_unit_waiting_to_join_cluster():
             self.join_unit_to_cluster()
-            for port in ["3306", "33060"]:
-                try:
-                    # TODO use set_ports instead
-                    subprocess.check_call(["open-port", f"{port}/tcp"])  # noqa: S603 S607
-                except subprocess.CalledProcessError:
-                    logger.exception(f"failed to open port {port}")
 
         if not self._mysql.reconcile_binlogs_collection(force_restart=True):
             logger.error("Failed to reconcile binlogs collection during peer relation event")
@@ -865,7 +869,6 @@ class MySQLOperatorCharm(MySQLCharmBase, TypedCharmBase[CharmConfig]):
             # Create the cluster and cluster set from the leader unit
             logger.info(f"Creating cluster {self.app_peer_data['cluster-name']}")
             self.create_cluster()
-            self.unit.set_ports(3306, 33060)
             self.unit.status = ActiveStatus(self.active_status_message)
         except (
             MySQLCreateClusterError,
