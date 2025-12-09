@@ -544,6 +544,10 @@ class MySQLOperatorCharm(MySQLCharmBase, TypedCharmBase[CharmConfig]):
             # health checks only after cluster and member are initialised
             logger.info("skip status update when not initialized")
             return
+
+        # Update endpoint addresses
+        self.update_endpoint_addresses()
+
         if (
             self.unit_peer_data.get("member-state") == "waiting"
             and not self.unit_configured
@@ -894,8 +898,12 @@ class MySQLOperatorCharm(MySQLCharmBase, TypedCharmBase[CharmConfig]):
         for unit in self.peers.units:
             if self.peers.data[unit].get("member-state") == "online":
                 try:
+                    unit_address = self.get_unit_address(unit, PEER)
+                    if not unit_address:
+                        continue
+
                     return self._mysql.get_cluster_primary_address(
-                        connect_instance_address=self.get_unit_address(unit, PEER)
+                        connect_instance_address=unit_address
                     )
                 except MySQLGetClusterPrimaryAddressError:
                     # try next unit
