@@ -782,14 +782,29 @@ class MySQL(MySQLBase):
         prepend_cmd = "shell.options.set('useWizards', False)\nprint('###')\n"
         script = prepend_cmd + script  # prepend output separator to script
 
+        # Ensure snap user data directory exists to avoid mysql_config_editor errors
+        try:
+            cache = snap.SnapCache()
+            mysql_snap = cache[CHARMED_MYSQL_SNAP_NAME]
+            revision = mysql_snap.revision
+            snap_path = f"/root/snap/{CHARMED_MYSQL_SNAP_NAME}/{revision}"
+            if not os.path.exists(snap_path):
+                os.makedirs(snap_path, mode=0o700, exist_ok=True)
+                logger.info(f"Created snap user data directory: {snap_path}")
+        except Exception as e:
+            logger.warning(f"Failed to ensure snap user data directory: {e}")
+
         command = [
             CHARMED_MYSQLSH,
             "--passwords-from-stdin",
+            "--credential-store-helper=none",
             f"--uri={user}@{host}",
             "--python",
             "-c",
             script,
         ]
+
+        env = os.environ.copy()
 
         try:
             # Input generaated by the charm
@@ -799,22 +814,23 @@ class MySQL(MySQLBase):
                 timeout=timeout,
                 input=password,
                 text=True,
+                env=env,
             )
             # split output to clean mysqlsh garbage
             return output.split("###")[1].strip()
         except subprocess.CalledProcessError as e:
             self.strip_off_passwords_from_exception(e)
             if exception_as_warning:
-                logger.warning("Failed to execute mysql-shell command")
+                logger.warning(f"Failed to execute mysql-shell command: {e.stderr}")
             else:
-                logger.exception("Failed to execute mysql-shell command")
+                logger.exception(f"Failed to execute mysql-shell command: {e.stderr}")
             raise MySQLClientError from e
         except subprocess.TimeoutExpired as e:
             self.strip_off_passwords_from_exception(e)
             if exception_as_warning:
-                logger.warning("MySQL shell command timed out")
+                logger.warning(f"MySQL shell command timed out: {e.stderr}")
             else:
-                logger.exception("MySQL shell command timed out")
+                logger.exception(f"MySQL shell command timed out: {e.stderr}")
             raise TimeoutError from e
 
     def _run_mysqlcli_script(
